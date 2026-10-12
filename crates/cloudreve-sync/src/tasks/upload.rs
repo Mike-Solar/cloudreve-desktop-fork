@@ -142,15 +142,26 @@ impl<'a> UploadTask<'a> {
             .map(|(meta, info)| local_snapshot_differs(meta, info))
             .unwrap_or(false);
 
-        if self
+        // Windows: the CFAPI IN_SYNC flag is the primary signal. Non-Windows
+        // has no such flag (in_sync() is always false), so the inventory
+        // snapshot is the only signal - this also suppresses the create/modify
+        // watcher events raised by our own downloads.
+        #[cfg(windows)]
+        let already_synced = self
             .local_file
             .as_ref()
             .unwrap()
             .local_file_info
             .in_sync()
-            && !is_directory
-            && !snapshot_differs
-        {
+            && !snapshot_differs;
+        #[cfg(not(windows))]
+        let already_synced = self
+            .inventory_meta
+            .as_ref()
+            .is_some_and(|meta| meta.local_updated_at.is_some() && meta.local_size.is_some())
+            && !snapshot_differs;
+
+        if already_synced && !is_directory && !self.task.payload.force_override {
             info!(
                 target: "tasks::upload",
                 task_id = %self.task.task_id,

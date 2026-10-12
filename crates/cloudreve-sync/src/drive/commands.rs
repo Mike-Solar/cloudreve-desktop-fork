@@ -979,7 +979,17 @@ impl Mount {
                 None => false,
             };
 
-            if !placeholder_info.in_sync() || snapshot_differs {
+            // On Windows the CFAPI IN_SYNC flag is the primary change signal.
+            // Non-Windows has no such flag (in_sync() is always false), so the
+            // inventory snapshot is the only reliable signal - without this
+            // distinction every downloaded file would immediately be queued
+            // for re-upload by its own modify event.
+            #[cfg(windows)]
+            let should_upload = !placeholder_info.in_sync() || snapshot_differs;
+            #[cfg(not(windows))]
+            let should_upload = snapshot_differs;
+
+            if should_upload {
                 tracing::debug!(target: "drive::commands", path = %path.display(), "Queuing upload task for modified file");
                 let payload = TaskPayload::upload(path.clone());
                 let result = self

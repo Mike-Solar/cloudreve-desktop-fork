@@ -1025,10 +1025,12 @@ impl Mount {
                     aggregate_error.push(path.clone(), err);
                 } else {
                     #[cfg(not(windows))]
-                    if remote.file_type != file_type::FOLDER {
-                        // Non-Windows `CrPlaceholder` only refreshes inventory metadata here.
-                        // Since Linux has no on-demand placeholder backend, the real file
-                        // contents must be downloaded immediately through the task queue.
+                    if *invalidate_all && remote.file_type != file_type::FOLDER {
+                        // Non-Windows `CrPlaceholder` only refreshes inventory metadata
+                        // here. Since Linux has no on-demand placeholder backend, the
+                        // real file contents must be downloaded through the task queue
+                        // whenever the remote content changed (invalidate_all). Metadata-
+                        // only refreshes (invalidate_all = false) do not need a download.
                         if let Err(err) = self
                             .task_queue
                             .enqueue(TaskPayload::download(path.clone()))
